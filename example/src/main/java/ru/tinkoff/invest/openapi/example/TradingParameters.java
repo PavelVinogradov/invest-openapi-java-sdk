@@ -4,6 +4,7 @@ import org.jetbrains.annotations.NotNull;
 import ru.tinkoff.invest.openapi.models.market.CandleInterval;
 
 import java.util.Arrays;
+import java.util.List;
 
 public class TradingParameters {
     @NotNull
@@ -29,14 +30,14 @@ public class TradingParameters {
                                                     @NotNull final String tickersArg,
                                                     @NotNull final String candleIntervalsArg,
                                                     @NotNull final String sandboxModeArg) {
-        final var tickers = tickersArg.split(",");
-        final var candleIntervals = Arrays.stream(candleIntervalsArg.split(","))
+        final String[] tickers = tickersArg.split(",");
+        final CandleInterval[] candleIntervals = Arrays.stream(candleIntervalsArg.split(","))
                 .map(TradingParameters::parseCandleInterval)
                 .toArray(CandleInterval[]::new);
         if (candleIntervals.length != tickers.length)
             throw new IllegalArgumentException("Количество переданных разрешающих интервалов свечей не совпадает с переданным количеством тикеров.");
 
-        final var useSandbox = Boolean.parseBoolean(sandboxModeArg);
+        final Boolean useSandbox = Boolean.parseBoolean(sandboxModeArg);
 
         return new TradingParameters(ssoTokenArg, tickers, candleIntervals, useSandbox);
     }

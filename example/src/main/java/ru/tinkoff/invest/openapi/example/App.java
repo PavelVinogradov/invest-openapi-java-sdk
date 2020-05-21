@@ -2,7 +2,11 @@ package ru.tinkoff.invest.openapi.example;
 
 import ru.tinkoff.invest.openapi.OpenApi;
 import ru.tinkoff.invest.openapi.SandboxOpenApi;
+import ru.tinkoff.invest.openapi.models.market.CandleInterval;
 import ru.tinkoff.invest.openapi.models.market.Instrument;
+import ru.tinkoff.invest.openapi.models.market.InstrumentsList;
+import ru.tinkoff.invest.openapi.models.orders.Order;
+import ru.tinkoff.invest.openapi.models.portfolio.Portfolio;
 import ru.tinkoff.invest.openapi.models.portfolio.PortfolioCurrencies;
 import ru.tinkoff.invest.openapi.models.streaming.StreamingRequest;
 import ru.tinkoff.invest.openapi.okhttp.OkHttpOpenApiFactory;
@@ -12,6 +16,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.logging.*;
@@ -35,7 +41,7 @@ public class App {
             return;
         }
 
-        final var factory = new OkHttpOpenApiFactory(parameters.ssoToken, logger);
+        final OkHttpOpenApiFactory factory = new OkHttpOpenApiFactory(parameters.ssoToken, logger);
         try {
             final OpenApi api;
 
@@ -48,26 +54,26 @@ public class App {
                 api = factory.createOpenApiClient(Executors.newSingleThreadExecutor());
             }
 
-            final var listener = new StreamingApiSubscriber(logger, Executors.newSingleThreadExecutor());
+            final StreamingApiSubscriber listener = new StreamingApiSubscriber(logger, Executors.newSingleThreadExecutor());
 
             api.getStreamingContext().getEventPublisher().subscribe(listener);
 
-            final var currentOrders = api.getOrdersContext().getOrders(null).join();
+            final List<Order> currentOrders = api.getOrdersContext().getOrders(null).join();
             logger.info("Количество текущих заявок: " + currentOrders.size());
-            final var currentPositions = api.getPortfolioContext().getPortfolio(null).join();
+            final Portfolio currentPositions = api.getPortfolioContext().getPortfolio(null).join();
             logger.info("Количество текущих позиций: " + currentPositions.positions.size());
 
             for (int i = 0; i < parameters.tickers.length; i++) {
-                final var ticker = parameters.tickers[i];
-                final var candleInterval = parameters.candleIntervals[i];
+                final String ticker = parameters.tickers[i];
+                final CandleInterval candleInterval = parameters.candleIntervals[i];
 
                 logger.info("Ищём по тикеру " + ticker + "... ");
-                final var instrumentsList = api.getMarketContext().searchMarketInstrumentsByTicker(ticker).join();
+                final InstrumentsList instrumentsList = api.getMarketContext().searchMarketInstrumentsByTicker(ticker).join();
 
-                final var instrumentOpt = instrumentsList.instruments.stream().findFirst();
+                final Optional<Instrument> instrumentOpt = instrumentsList.instruments.stream().findFirst();
 
                 final Instrument instrument;
-                if (instrumentOpt.isEmpty()) {
+                if (!instrumentOpt.isPresent()) {
                     logger.severe("Не нашлось инструмента с нужным тикером.");
                     return;
                 } else {
@@ -75,14 +81,14 @@ public class App {
                 }
 
                 logger.info("Получаем валютные балансы... ");
-                final var portfolioCurrencies = api.getPortfolioContext().getPortfolioCurrencies(null).join();
+                final PortfolioCurrencies portfolioCurrencies = api.getPortfolioContext().getPortfolioCurrencies(null).join();
 
-                final var portfolioCurrencyOpt = portfolioCurrencies.currencies.stream()
+                final Optional<PortfolioCurrencies.PortfolioCurrency> portfolioCurrencyOpt = portfolioCurrencies.currencies.stream()
                         .filter(pc -> pc.currency == instrument.currency)
                         .findFirst();
 
                 final PortfolioCurrencies.PortfolioCurrency portfolioCurrency;
-                if (portfolioCurrencyOpt.isEmpty()) {
+                if (!portfolioCurrencyOpt.isPresent()) {
                     logger.severe("Не нашлось нужной валютной позиции.");
                     return;
                 } else {
@@ -95,7 +101,7 @@ public class App {
 
             initCleanupProcedure(api, logger);
 
-            final var result = new CompletableFuture<Void>();
+            final CompletableFuture result = new CompletableFuture<Void>();
             result.join();
 
             api.close();
@@ -105,8 +111,8 @@ public class App {
     }
 
     private static Logger initLogger() throws IOException {
-        final var logManager = LogManager.getLogManager();
-        final var classLoader = App.class.getClassLoader();
+        final LogManager logManager = LogManager.getLogManager();
+        final ClassLoader classLoader = App.class.getClassLoader();
 
         try (final InputStream input = classLoader.getResourceAsStream("logging.properties")) {
 
